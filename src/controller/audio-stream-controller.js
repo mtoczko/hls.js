@@ -190,6 +190,7 @@ class AudioStreamController extends TaskLoop {
         bufferLen = bufferInfo.len,
         bufferEnd = bufferInfo.end,
         fragPrevious = this.fragPrevious,
+        fragCurrent = this.fragCurrent,
         // ensure we buffer at least config.maxBufferLength (default 30s) or config.maxMaxBufferLength (default: 600s)
         // whichever is smaller.
         // once we reach that threshold, don't buffer more than video (mainBufferInfo.len)
@@ -211,11 +212,11 @@ class AudioStreamController extends TaskLoop {
         // we just got done loading the final fragment and there is no other buffered range after ...
         // rationale is that in case there are any buffered ranges after, it means that there are unbuffered portion in between
         // so we should not switch to ENDED in that case, to be able to buffer them
-        if (!audioSwitch && !trackDetails.live && fragPrevious && fragPrevious.sn === trackDetails.endSN && !bufferInfo.nextStart) {
+        if (!audioSwitch && !trackDetails.live && fragCurrent && fragCurrent.sn === trackDetails.endSN && !bufferInfo.nextStart) {
           // if we are not seeking or if we are seeking but everything (almost) til the end is buffered, let's signal eos
           // we don't compare exactly media.duration === bufferInfo.end as there could be some subtle media duration difference when switching
           // between different renditions. using half frag duration should help cope with these cases.
-          if (!this.media.seeking || (this.media.duration - bufferEnd) < fragPrevious.duration / 2) {
+          if (!this.media.seeking || (this.media.duration - bufferEnd) < fragCurrent.duration / 2) {
             // Finalize the media stream
             this.hls.trigger(Event.BUFFER_EOS, { type: 'audio' });
             this.state = State.ENDED;
@@ -336,8 +337,8 @@ class AudioStreamController extends TaskLoop {
             logger.log(`Loading ${frag.sn}, cc: ${frag.cc} of [${trackDetails.startSN} ,${trackDetails.endSN}],track ${trackId}, currentTime:${pos},bufferEnd:${bufferEnd.toFixed(3)}`);
             // only load if fragment is not loaded or if in audio switch
             // we force a frag loading in audio switch as fragment tracker might not have evicted previous frags in case of quick audio switch
+            this.fragCurrent = frag;
             if (audioSwitch || this.fragmentTracker.getState(frag) === FragmentState.NOT_LOADED) {
-              this.fragCurrent = frag;
               this.startFragRequested = true;
               if (Number.isFinite(frag.sn)) {
                 this.nextLoadPosition = frag.start + frag.duration;

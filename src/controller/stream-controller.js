@@ -241,16 +241,16 @@ class StreamController extends TaskLoop {
     // rationale is that in case there are any buffered ranges after, it means that there are unbuffered portion in between
     // so we should not switch to ENDED in that case, to be able to buffer them
     // dont switch to ENDED if we need to backtrack last fragment
-    let fragPrevious = this.fragPrevious;
-    if (!levelDetails.live && fragPrevious && !fragPrevious.backtracked && fragPrevious.sn === levelDetails.endSN && !bufferInfo.nextStart) {
+    let fragCurrent = this.fragCurrent;
+    if (!levelDetails.live && fragCurrent && !fragCurrent.backtracked && fragCurrent.sn === levelDetails.endSN && !bufferInfo.nextStart) {
       // fragPrevious is last fragment. retrieve level duration using last frag start offset + duration
       // real duration might be lower than initial duration if there are drifts between real frag duration and playlist signaling
-      const duration = Math.min(media.duration, fragPrevious.start + fragPrevious.duration);
+      const duration = Math.min(media.duration, fragCurrent.start + fragCurrent.duration);
       // if everything (almost) til the end is buffered, let's signal eos
       // we don't compare exactly media.duration === bufferInfo.end as there could be some subtle media duration difference (audio/video offsets...)
       // tolerate up to one frag duration to cope with these cases.
       // also cope with almost zero last frag duration (max last frag duration with 200ms) refer to https://github.com/video-dev/hls.js/pull/657
-      if (duration - Math.max(bufferInfo.end, fragPrevious.start) <= Math.max(0.2, fragPrevious.duration)) {
+      if (duration - Math.max(bufferInfo.end, fragCurrent.start) <= Math.max(0.2, fragCurrent.duration)) {
         // Finalize the media stream
         let data = {};
         if (this.altAudio) {
@@ -659,7 +659,8 @@ class StreamController extends TaskLoop {
       }
       if (!media.paused) {
         // add a safety delay of 1s
-        let nextLevelId = this.hls.nextLoadLevel, nextLevel = this.levels[nextLevelId], fragLastKbps = this.fragLastKbps;
+        let nextLevelId = this.hls.nextLoadLevel, nextLevel = this.levels[nextLevelId],
+          fragLastKbps = this.fragLastKbps;
         if (fragLastKbps && this.fragCurrent) {
           fetchdelay = this.fragCurrent.duration * nextLevel.bitrate / (1000 * fragLastKbps) + 1;
         } else {
@@ -889,7 +890,7 @@ class StreamController extends TaskLoop {
     this.hls.trigger(Event.LEVEL_UPDATED, { details: newDetails, level: newLevelId });
 
     if (this.startFragRequested === false) {
-    // compute start position if set to -1. use it straight away if value is defined
+      // compute start position if set to -1. use it straight away if value is defined
       if (this.startPosition === -1 || this.lastCurrentTime === -1) {
         // first, check if start time offset has been set in playlist, if yes, use this value
         let startTimeOffset = newDetails.startTimeOffset;
@@ -933,10 +934,10 @@ class StreamController extends TaskLoop {
     const { fragCurrent, hls, levels, media } = this;
     const fragLoaded = data.frag;
     if (this.state === State.FRAG_LOADING &&
-        fragCurrent &&
-        fragLoaded.type === 'main' &&
-        fragLoaded.level === fragCurrent.level &&
-        fragLoaded.sn === fragCurrent.sn) {
+      fragCurrent &&
+      fragLoaded.type === 'main' &&
+      fragLoaded.level === fragCurrent.level &&
+      fragLoaded.sn === fragCurrent.sn) {
       const stats = data.stats;
       const currentLevel = levels[fragCurrent.level];
       const details = currentLevel.details;
@@ -1001,10 +1002,10 @@ class StreamController extends TaskLoop {
     const fragNew = data.frag;
 
     if (fragCurrent &&
-        data.id === 'main' &&
-        fragNew.sn === fragCurrent.sn &&
-        fragNew.level === fragCurrent.level &&
-        this.state === State.PARSING) {
+      data.id === 'main' &&
+      fragNew.sn === fragCurrent.sn &&
+      fragNew.level === fragCurrent.level &&
+      this.state === State.PARSING) {
       let tracks = data.tracks, trackName, track;
 
       // if audio track is expected to come from audio stream controller, discard any coming from main
@@ -1060,7 +1061,12 @@ class StreamController extends TaskLoop {
           this.appended = true;
           // arm pending Buffering flag before appending a segment
           this.pendingBuffering = true;
-          this.hls.trigger(Event.BUFFER_APPENDING, { type: trackName, data: initSegment, parent: 'main', content: 'initSegment' });
+          this.hls.trigger(Event.BUFFER_APPENDING, {
+            type: trackName,
+            data: initSegment,
+            parent: 'main',
+            content: 'initSegment'
+          });
         }
       }
       // trigger handler right now
@@ -1072,11 +1078,11 @@ class StreamController extends TaskLoop {
     const fragCurrent = this.fragCurrent;
     const fragNew = data.frag;
     if (fragCurrent &&
-        data.id === 'main' &&
-        fragNew.sn === fragCurrent.sn &&
-        fragNew.level === fragCurrent.level &&
-        !(data.type === 'audio' && this.altAudio) && // filter out main audio if audio track is loaded through audio stream controller
-        this.state === State.PARSING) {
+      data.id === 'main' &&
+      fragNew.sn === fragCurrent.sn &&
+      fragNew.level === fragCurrent.level &&
+      !(data.type === 'audio' && this.altAudio) && // filter out main audio if audio track is loaded through audio stream controller
+      this.state === State.PARSING) {
       let level = this.levels[this.level],
         frag = fragCurrent;
       if (!Number.isFinite(data.endPTS)) {
@@ -1126,7 +1132,14 @@ class StreamController extends TaskLoop {
 
       let drift = LevelHelper.updateFragPTSDTS(level.details, frag, data.startPTS, data.endPTS, data.startDTS, data.endDTS),
         hls = this.hls;
-      hls.trigger(Event.LEVEL_PTS_UPDATED, { details: level.details, level: this.level, drift: drift, type: data.type, start: data.startPTS, end: data.endPTS });
+      hls.trigger(Event.LEVEL_PTS_UPDATED, {
+        details: level.details,
+        level: this.level,
+        drift: drift,
+        type: data.type,
+        start: data.startPTS,
+        end: data.endPTS
+      });
       // has remuxer dropped video frames located before first keyframe ?
       [data.data1, data.data2].forEach(buffer => {
         // only append in PARSING state (rationale is that an appending error could happen synchronously on first segment appending)
@@ -1147,10 +1160,10 @@ class StreamController extends TaskLoop {
     const fragCurrent = this.fragCurrent;
     const fragNew = data.frag;
     if (fragCurrent &&
-        data.id === 'main' &&
-        fragNew.sn === fragCurrent.sn &&
-        fragNew.level === fragCurrent.level &&
-        this.state === State.PARSING) {
+      data.id === 'main' &&
+      fragNew.sn === fragCurrent.sn &&
+      fragNew.level === fragCurrent.level &&
+      this.state === State.PARSING) {
       this.stats.tparsed = window.performance.now();
       this.state = State.PARSED;
       this._checkAppendedParsed();
@@ -1261,7 +1274,7 @@ class StreamController extends TaskLoop {
   }
 
   onError (data) {
-    let frag = data.frag || this.fragCurrent;
+    let frag = data.frag || this.fragCurrent;
     // don't handle frag error not related to main fragment
     if (frag && frag.type !== 'main') {
       return;
@@ -1316,7 +1329,7 @@ class StreamController extends TaskLoop {
       break;
     case ErrorDetails.BUFFER_FULL_ERROR:
       // if in appending state
-      if (data.parent === 'main' && (this.state === State.PARSING || this.state === State.PARSED)) {
+      if (data.parent === 'main' && (this.state === State.PARSING || this.state === State.PARSED)) {
         // reduce max buf len if current position is buffered
         if (mediaBuffered) {
           this._reduceMaxBufferLength(this.config.maxBufferLength);
@@ -1449,4 +1462,5 @@ class StreamController extends TaskLoop {
     this._liveSyncPosition = value;
   }
 }
+
 export default StreamController;
