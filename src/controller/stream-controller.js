@@ -1409,6 +1409,7 @@ class StreamController extends TaskLoop {
     this.state = State.IDLE;
     // reset reference to frag
     this.fragPrevious = null;
+    this.fragCurrent = null;
   }
 
   swapAudioCodec () {
